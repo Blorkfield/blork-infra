@@ -8,9 +8,9 @@ on:
         type: string
         required: true
       watched_paths:
-        description: 'Regex pattern for paths to watch for changes (e.g., ^(src/|package\.json))'
+        description: 'Regex pattern for paths to watch for changes'
         type: string
-        default: '^(src/|package\.json|tsconfig\.json)'
+        default: '^(src/|test-app/|fonts/|public/|package\.json|tsconfig\.json|tsup\.config\.ts|Dockerfile|nginx\.conf)'
 
 jobs:
   create-pr:
@@ -109,12 +109,12 @@ jobs:
           # Create changeset file
           mkdir -p .changeset
           cat > "$CHANGESET_PATH" << EOF
----
-"$PACKAGE_NAME": $BUMP
----
+          ---
+          "$PACKAGE_NAME": $BUMP
+          ---
 
-$TITLE
-EOF
+          $TITLE
+          EOF
 
           echo "Created changeset: $CHANGESET_PATH"
           cat "$CHANGESET_PATH"

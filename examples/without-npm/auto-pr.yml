@@ -1,4 +1,4 @@
-# Example Auto PR workflow for repos that DON'T publish to npm (like obs-overlay)
+# Example Auto PR workflow for repos that DON'T publish to npm
 # Copy this to your repo's .github/workflows/auto-pr.yml
 
 name: Auto PR
@@ -14,5 +14,5 @@ jobs:
     uses: Blorkfield/blork-infra/.github/workflows/auto-pr.yml@main
     secrets: inherit
     with:
-      package_name: '@blorkfield/obs-overlay'
-      watched_paths: '^(src/|package\.json|tsconfig\.json|vite\.config\.ts|Dockerfile|nginx\.conf)'
+      package_name: '@blorkfield/obs-overlay'  # Change this
+      # watched_paths uses sensible default, only override if needed
