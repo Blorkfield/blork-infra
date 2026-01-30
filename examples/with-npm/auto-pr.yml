@@ -15,4 +15,4 @@ jobs:
     secrets: inherit
     with:
       package_name: '@blorkfield/your-package-name'  # Change this
-      watched_paths: 'src/,package.json,tsconfig.json,tsup.config.ts,Dockerfile'
+      watched_paths: '^(src/|package\.json|tsconfig\.json|tsup\.config\.ts|Dockerfile)'

@@ -22,7 +22,9 @@ on:
 
 jobs:
   build:
+    name: Build and Typecheck
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +38,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
-          cache: 'pnpm'
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,20 +51,20 @@ jobs:
         run: ${{ inputs.typecheck_command }}
 
   automerge:
+    name: Auto-merge
     needs: build
     runs-on: ubuntu-latest
-    # Only run on pull requests when automerge is enabled
-    # The caller workflow must pass the event context
     if: inputs.enable_automerge && github.event_name == 'pull_request'
     steps:
-      - name: Create bot token
+      - name: Generate bot token
         id: bot-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
-      - name: Auto-merge PR
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash --delete-branch "$PR_URL"
         env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-        run: gh pr merge --auto --squash --delete-branch "${{ github.event.pull_request.html_url }}"

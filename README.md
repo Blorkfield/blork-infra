@@ -27,9 +27,7 @@ Release PR creation, npm publishing (optional), and Docker publishing (optional)
 | `publish_npm` | boolean | `false` | Publish to npm |
 | `npm_access` | string | `'public'` | npm access level |
 | `publish_docker` | boolean | `false` | Publish Docker image |
-| `docker_image_name` | string | `''` | Docker image name (required if publish_docker is true) |
-| `docker_registry` | string | `'ghcr.io'` | Docker registry |
-| `docker_context` | string | `'.'` | Docker build context |
+| `docker_image_name` | string | `''` | Docker image name (used as `ghcr.io/blorkfield/<name>`) |
 | `force_publish` | boolean | `false` | Force publish regardless of release detection |
 
 ### auto-pr.yml
@@ -40,7 +38,7 @@ Automatically create PRs and changesets based on branch naming conventions.
 | Input | Type | Default | Description |
 |-------|------|---------|-------------|
 | `package_name` | string | *required* | Package name for changeset |
-| `watched_paths` | string | `'src/,package.json,tsconfig.json'` | Comma-separated paths to watch |
+| `watched_paths` | string | `'^(src/\|package\.json\|tsconfig\.json)'` | Regex pattern for paths to watch |
 
 **Branch naming conventions:**
 | Prefix | Type | Version Bump |
@@ -109,11 +107,14 @@ For each package that publishes to npm, configure trusted publishers on npmjs.co
 1. Go to your package settings on npmjs.com
 2. Navigate to "Publishing access" → "Trusted publishers"
 3. Add a new trusted publisher with:
-   - **Repository:** `Blorkfield/blork-infra`
+   - **Repository owner:** `Blorkfield`
+   - **Repository name:** `<your-repo-name>` (e.g., `overlay-core`)
    - **Workflow:** `publish.yml`
    - **Environment:** *(leave blank)*
 
-This allows the centralized workflow in blork-infra to publish packages with provenance attestation.
+**Important:** The trusted publisher is configured for the *calling* repository, not blork-infra. The OIDC token identifies where the workflow was triggered from.
+
+No `NPM_TOKEN` secret is required - authentication is handled via OIDC.
 
 ## Usage Examples
 
@@ -172,7 +173,7 @@ jobs:
     secrets: inherit
     with:
       package_name: '@blorkfield/overlay-core'
-      watched_paths: 'src/,test-app/,fonts/,public/,package.json,tsconfig.json,tsup.config.ts,Dockerfile,nginx.conf'
+      watched_paths: '^(src/|test-app/|fonts/|public/|package\.json|tsconfig\.json|tsup\.config\.ts|Dockerfile|nginx\.conf)'
 ```
 
 ### Repository with Docker Only (like obs-overlay)

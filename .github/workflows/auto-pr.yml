@@ -1,4 +1,4 @@
-name: Auto PR
+name: Auto Create PR
 
 on:
   workflow_call:
@@ -8,15 +8,15 @@ on:
         type: string
         required: true
       watched_paths:
-        description: 'Comma-separated paths to watch for changes (e.g., src/,package.json,tsconfig.json)'
+        description: 'Regex pattern for paths to watch for changes (e.g., ^(src/|package\.json))'
         type: string
-        default: 'src/,package.json,tsconfig.json'
+        default: '^(src/|package\.json|tsconfig\.json)'
 
 jobs:
   create-pr:
     runs-on: ubuntu-latest
     steps:
-      - name: Create bot token
+      - name: Generate bot token
         id: bot-token
         uses: actions/create-github-app-token@v1
         with:
@@ -29,178 +29,113 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.bot-token.outputs.token }}
 
-      - name: Configure git
+      - name: Setup Git
         run: |
           git config user.name "bork-blot[bot]"
           git config user.email "bork-blot[bot]@users.noreply.github.com"
 
-      - name: Parse branch name and create changeset
+      - name: Parse branch and create changeset
         id: parse
+        run: |
+          BRANCH="$GITHUB_REF_NAME"
+
+          # Extract prefix and description (handles both / and - separators)
+          if [[ "$BRANCH" == *"/"* ]]; then
+            PREFIX="${BRANCH%%/*}"
+            DESC="${BRANCH#*/}"
+          elif [[ "$BRANCH" == *"-"* ]]; then
+            PREFIX="${BRANCH%%-*}"
+            DESC="${BRANCH#*-}"
+          else
+            PREFIX=""
+            DESC="$BRANCH"
+          fi
+
+          # Map branch prefixes to conventional commit types and bump types
+          case "$PREFIX" in
+            feature|feat)     TYPE="feat"; BUMP="minor" ;;
+            fix|bugfix|hotfix) TYPE="fix"; BUMP="patch" ;;
+            chore)            TYPE="chore"; BUMP="patch" ;;
+            docs|doc)         TYPE="docs"; BUMP="patch" ;;
+            refactor)         TYPE="refactor"; BUMP="patch" ;;
+            perf|performance) TYPE="perf"; BUMP="patch" ;;
+            test|tests)       TYPE="test"; BUMP="patch" ;;
+            style)            TYPE="style"; BUMP="patch" ;;
+            ci)               TYPE="ci"; BUMP="patch" ;;
+            build)            TYPE="build"; BUMP="patch" ;;
+            breaking)         TYPE="feat"; BUMP="major" ;;
+            *)                TYPE=""; BUMP="" ;;
+          esac
+
+          # Format the title
+          if [ -n "$TYPE" ]; then
+            DESC_READABLE=$(echo "$DESC" | tr '-' ' ' | tr '_' ' ')
+            TITLE="$TYPE: $DESC_READABLE"
+          else
+            TITLE="$BRANCH"
+          fi
+
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          echo "desc=$DESC" >> $GITHUB_OUTPUT
+
+      - name: Create changeset file
+        if: steps.parse.outputs.bump != ''
         env:
           PACKAGE_NAME: ${{ inputs.package_name }}
           WATCHED_PATHS: ${{ inputs.watched_paths }}
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          BUMP="${{ steps.parse.outputs.bump }}"
+          DESC="${{ steps.parse.outputs.desc }}"
+          BRANCH="$GITHUB_REF_NAME"
+          TITLE="${{ steps.parse.outputs.title }}"
 
-          # Extract prefix and description from branch name
-          # Format: prefix/description or prefix-description
-          if [[ "$BRANCH_NAME" == *"/"* ]]; then
-            PREFIX="${BRANCH_NAME%%/*}"
-            DESCRIPTION="${BRANCH_NAME#*/}"
-          elif [[ "$BRANCH_NAME" == *"-"* ]]; then
-            PREFIX="${BRANCH_NAME%%-*}"
-            DESCRIPTION="${BRANCH_NAME#*-}"
-          else
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Branch name doesn't match expected format (prefix/description or prefix-description)"
+          # Create a safe filename from branch name
+          CHANGESET_FILE=$(echo "$DESC" | tr '/' '-' | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+          CHANGESET_PATH=".changeset/${CHANGESET_FILE}.md"
+
+          # Skip if changeset already exists for THIS branch
+          if [ -f "$CHANGESET_PATH" ]; then
+            echo "Changeset already exists for this branch, skipping creation"
             exit 0
           fi
 
-          echo "prefix=$PREFIX" >> $GITHUB_OUTPUT
-          echo "description=$DESCRIPTION" >> $GITHUB_OUTPUT
-
-          # Map prefix to conventional commit type and version bump
-          case "$PREFIX" in
-            feature|feat)
-              TYPE="feat"
-              BUMP="minor"
-              ;;
-            fix|bugfix|hotfix)
-              TYPE="fix"
-              BUMP="patch"
-              ;;
-            chore)
-              TYPE="chore"
-              BUMP="patch"
-              ;;
-            docs|doc)
-              TYPE="docs"
-              BUMP="patch"
-              ;;
-            refactor)
-              TYPE="refactor"
-              BUMP="patch"
-              ;;
-            perf|performance)
-              TYPE="perf"
-              BUMP="patch"
-              ;;
-            test|tests)
-              TYPE="test"
-              BUMP="patch"
-              ;;
-            style)
-              TYPE="style"
-              BUMP="patch"
-              ;;
-            ci)
-              TYPE="ci"
-              BUMP="patch"
-              ;;
-            build)
-              TYPE="build"
-              BUMP="patch"
-              ;;
-            breaking)
-              TYPE="feat"
-              BUMP="major"
-              ;;
-            *)
-              echo "skip=true" >> $GITHUB_OUTPUT
-              echo "Unknown branch prefix: $PREFIX"
-              exit 0
-              ;;
-          esac
-
-          echo "type=$TYPE" >> $GITHUB_OUTPUT
-          echo "bump=$BUMP" >> $GITHUB_OUTPUT
-          echo "skip=false" >> $GITHUB_OUTPUT
-
-          # Create changeset filename from description
-          CHANGESET_NAME=$(echo "$DESCRIPTION" | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-')
-          echo "changeset_name=$CHANGESET_NAME" >> $GITHUB_OUTPUT
-
-          # Check if changeset already exists
-          if [ -f ".changeset/${CHANGESET_NAME}.md" ]; then
-            echo "changeset_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "changeset_exists=false" >> $GITHUB_OUTPUT
+          # Check if there are any relevant changes compared to main
+          if ! git diff --name-only origin/main...HEAD | grep -qE "$WATCHED_PATHS"; then
+            echo "No relevant changes detected, skipping changeset"
+            exit 0
           fi
 
-          # Create commit title
-          TITLE_DESC=$(echo "$DESCRIPTION" | tr '-' ' ')
-          COMMIT_TITLE="${TYPE}: ${TITLE_DESC}"
-          echo "commit_title=$COMMIT_TITLE" >> $GITHUB_OUTPUT
-
-      - name: Check for relevant changes
-        id: changes
-        if: steps.parse.outputs.skip != 'true' && steps.parse.outputs.changeset_exists != 'true'
-        env:
-          WATCHED_PATHS: ${{ inputs.watched_paths }}
-        run: |
-          # Convert comma-separated paths to array
-          IFS=',' read -ra PATHS <<< "$WATCHED_PATHS"
-
-          # Check if any watched paths have changes compared to main
-          HAS_CHANGES=false
-          for path in "${PATHS[@]}"; do
-            path=$(echo "$path" | xargs)  # Trim whitespace
-            if git diff --name-only origin/main...HEAD | grep -q "^${path}"; then
-              HAS_CHANGES=true
-              break
-            fi
-          done
-
-          echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
-
-      - name: Create changeset
-        if: |
-          steps.parse.outputs.skip != 'true' &&
-          steps.parse.outputs.changeset_exists != 'true' &&
-          steps.changes.outputs.has_changes == 'true'
-        env:
-          PACKAGE_NAME: ${{ inputs.package_name }}
-          BUMP: ${{ steps.parse.outputs.bump }}
-          CHANGESET_NAME: ${{ steps.parse.outputs.changeset_name }}
-          COMMIT_TITLE: ${{ steps.parse.outputs.commit_title }}
-          BRANCH_NAME: ${{ steps.parse.outputs.branch }}
-        run: |
+          # Create changeset file
           mkdir -p .changeset
+          cat > "$CHANGESET_PATH" << EOF
+---
+"$PACKAGE_NAME": $BUMP
+---
 
-          cat > ".changeset/${CHANGESET_NAME}.md" << EOF
-          ---
-          "${PACKAGE_NAME}": ${BUMP}
-          ---
+$TITLE
+EOF
 
-          ${COMMIT_TITLE}
-          EOF
+          echo "Created changeset: $CHANGESET_PATH"
+          cat "$CHANGESET_PATH"
 
-          git add ".changeset/${CHANGESET_NAME}.md"
-          git commit -m "chore: add changeset for ${BRANCH_NAME}"
-          git push origin HEAD
+          # Commit and push the changeset
+          git add .changeset/
+          git commit -m "chore: add changeset for $BRANCH"
+          git push
 
-      - name: Check if PR exists
-        id: pr-check
-        env:
-          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-          BRANCH_NAME: ${{ steps.parse.outputs.branch }}
+      - name: Create Pull Request
         run: |
-          PR_EXISTS=$(gh pr list --head "$BRANCH_NAME" --json number --jq 'length')
-          if [ "$PR_EXISTS" -gt 0 ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          EXISTING_PR=$(gh pr list --head "$GITHUB_REF_NAME" --json number --jq '.[0].number')
+
+          if [ -n "$EXISTING_PR" ]; then
+            echo "PR #$EXISTING_PR already exists for branch $GITHUB_REF_NAME"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+            # Create PR
+            gh pr create \
+              --title "${{ steps.parse.outputs.title }}" \
+              --body "Auto-generated PR for branch \`$GITHUB_REF_NAME\`" \
+              --base main
           fi
-
-      - name: Create PR
-        if: steps.pr-check.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ steps.bot-token.outputs.token }}
-          BRANCH_NAME: ${{ steps.parse.outputs.branch }}
-        run: |
-          gh pr create \
-            --title "$BRANCH_NAME" \
-            --body "Auto-generated PR for branch: $BRANCH_NAME" \
-            --base main \
-            --head "$BRANCH_NAME"

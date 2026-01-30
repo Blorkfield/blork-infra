@@ -15,4 +15,4 @@ jobs:
     secrets: inherit
     with:
       package_name: '@blorkfield/obs-overlay'
-      watched_paths: 'src/,package.json,tsconfig.json,vite.config.ts,Dockerfile'
+      watched_paths: '^(src/|package\.json|tsconfig\.json|vite\.config\.ts|Dockerfile|nginx\.conf)'
