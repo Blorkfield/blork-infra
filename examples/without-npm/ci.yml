@@ -1,0 +1,19 @@
+# Example CI workflow for repos that DON'T publish to npm (like obs-overlay)
+# Copy this to your repo's .github/workflows/ci.yml
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    uses: Blorkfield/blork-infra/.github/workflows/ci.yml@main
+    secrets: inherit
+    with:
+      node_version: '22'
+      run_typecheck: true
+      enable_automerge: true

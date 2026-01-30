@@ -1,0 +1,18 @@
+# Example Auto PR workflow for repos that publish to npm
+# Copy this to your repo's .github/workflows/auto-pr.yml
+
+name: Auto PR
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - 'release/**'
+
+jobs:
+  auto-pr:
+    uses: Blorkfield/blork-infra/.github/workflows/auto-pr.yml@main
+    secrets: inherit
+    with:
+      package_name: '@blorkfield/your-package-name'  # Change this
+      watched_paths: 'src/,package.json,tsconfig.json,tsup.config.ts,Dockerfile'

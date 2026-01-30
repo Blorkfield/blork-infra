@@ -1,0 +1,26 @@
+# Example Publish workflow for repos that publish to npm
+# Copy this to your repo's .github/workflows/publish.yml
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: 'Force publish regardless of release detection'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    uses: Blorkfield/blork-infra/.github/workflows/publish.yml@main
+    secrets: inherit
+    with:
+      node_version: '22'
+      publish_npm: true
+      npm_access: 'public'
+      publish_docker: true
+      docker_image_name: 'your-package-name'  # Change this
+      force_publish: ${{ inputs.force_publish || false }}

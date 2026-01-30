@@ -1,0 +1,25 @@
+# Example Publish workflow for repos that DON'T publish to npm (like obs-overlay)
+# Copy this to your repo's .github/workflows/publish.yml
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: 'Force publish regardless of release detection'
+        type: boolean
+        default: false
+
+jobs:
+  publish:
+    uses: Blorkfield/blork-infra/.github/workflows/publish.yml@main
+    secrets: inherit
+    with:
+      node_version: '22'
+      publish_npm: false           # No npm publishing
+      publish_docker: true         # Docker only
+      docker_image_name: 'obs-overlay'
+      force_publish: ${{ inputs.force_publish || false }}

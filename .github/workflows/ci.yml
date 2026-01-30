@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        description: 'Node.js version to use'
+        type: string
+        default: '22'
+      run_typecheck:
+        description: 'Whether to run typecheck'
+        type: boolean
+        default: true
+      typecheck_command:
+        description: 'Command to run for typecheck'
+        type: string
+        default: 'pnpm typecheck'
+      enable_automerge:
+        description: 'Enable auto-merge for PRs'
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        if: inputs.run_typecheck
+        run: ${{ inputs.typecheck_command }}
+
+  automerge:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only run on pull requests when automerge is enabled
+    # The caller workflow must pass the event context
+    if: inputs.enable_automerge && github.event_name == 'pull_request'
+    steps:
+      - name: Create bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
+      - name: Auto-merge PR
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
+        run: gh pr merge --auto --squash --delete-branch "${{ github.event.pull_request.html_url }}"
