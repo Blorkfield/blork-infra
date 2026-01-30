@@ -13,14 +13,17 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
 jobs:
   publish:
     uses: Blorkfield/blork-infra/.github/workflows/publish.yml@main
     secrets: inherit
     with:
-      node_version: '22'
       publish_npm: true
-      npm_access: 'public'
       publish_docker: true
       docker_image_name: 'your-package-name'  # Change this
       force_publish: ${{ inputs.force_publish || false }}
